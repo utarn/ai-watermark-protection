@@ -75,7 +75,74 @@ This command will:
 
 ## 🚀 Usage / การใช้งาน
 
-### Option 1: Using Docker (Recommended) / ใช้งานกับ Docker (แนะนำ)
+### Option 1: Command Line Interface (CLI) / ส่วนติดต่อบรรทัดคำสั่ง
+
+The AI Watermark Fighter now supports command-line processing for batch operations with automatic file naming!
+
+**Key Features:**
+- **Automatic Suffix Naming**: Input files get suffixes added automatically
+  - Enlarge operation: `filename.jpg` → `filename-enlarge.jpg`
+  - Restore operation: `filename.jpg` → `filename-restore.jpg`
+- **Batch Processing**: Process multiple files at once
+- **Flexible Input**: Support single files, directories, and glob patterns
+- **Custom Output Directory**: Specify where to save processed files
+
+**Installation for CLI:**
+```bash
+# Install the package in development mode
+pip install -e .
+```
+
+**Basic CLI Usage:**
+```bash
+# Enlarge a single image
+ai-watermark-fighter enlarge image.jpg
+
+# Enlarge multiple images with custom output directory
+ai-watermark-fighter enlarge *.jpg --output-dir ./processed
+
+# Restore enlarged images
+ai-watermark-fighter restore image-enlarge.jpg
+
+# Process all images in a directory
+ai-watermark-fighter enlarge ./images/ --output-dir ./output
+
+# Verbose output
+ai-watermark-fighter enlarge *.png --verbose
+```
+
+**Output Examples:**
+```
+Input:          Output:
+photo.jpg       → photo-enlarge.jpg
+image.png       → image-enlarge.png
+diagram.webp    → diagram-enlarge.webp
+```
+
+**Advanced Usage:**
+```bash
+# Restore all enlarged images in a directory
+ai-watermark-fighter restore ./enlarge_images/ --output-dir ./restored/
+
+# Process using glob patterns
+ai-watermark-fighter enlarge "photos/**/*.jpg" --output-dir ./protected/
+
+# Alternative direct usage
+python cli.py enlarge image.jpg --output-dir ./results
+```
+
+**Programming Usage:**
+```python
+from ai_watermark_fighter import process_enlarge_images, process_restore_images
+from pathlib import Path
+
+# Process files programmatically
+input_files = [Path("image1.jpg"), Path("image2.png")]
+enlarged = process_enlarge_images(input_files, Path("./output"))
+restored = process_restore_images(enlarged, Path("./restored"))
+```
+
+### Option 2: Using Docker (Recommended for Web UI) / ใช้งานกับ Docker (แนะนำสำหรับ Web UI)
 
 **Prerequisites / ความต้องการ:**
 - Docker
@@ -206,6 +273,9 @@ Crops an image by removing canvas from the right and bottom based on 10% of the 
 ```
 /
 ├── app.py              # Main Gradio application
+├── cli.py              # Command Line Interface for batch processing
+├── examples.py         # Usage examples and demonstrations
+├── __init__.py         # Package initialization file
 ├── pyproject.toml      # Project configuration and dependencies
 ├── uv.lock             # Locked dependencies
 ├── test_logic.py       # Unit tests for image processing logic
@@ -214,6 +284,13 @@ Crops an image by removing canvas from the right and bottom based on 10% of the 
 ├── .dockerignore       # Docker build exclusions
 └── README.md           # This file
 ```
+
+**File Descriptions:**
+
+- **`app.py`**: Gradio web interface for interactive image processing
+- **`cli.py`**: Command-line tool for batch processing with automatic suffix naming
+- **`examples.py`**: Demonstrates both programmatic and CLI usage patterns
+- **`__init__.py`**: Makes the project importable as a Python package
 
 ## 🔧 Dependencies / Dependencies
 
