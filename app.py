@@ -451,7 +451,7 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
             
             def process_and_save_crop(image, output_format):
                 processed_image = process_crop_single(image, output_format)
-                if processed_image is 'JPG':
+                if output_format == 'JPG':
                     # Convert to RGB for JPEG
                     if processed_image.mode in ['RGBA', 'LA']:
                         background = Image.new('RGB', processed_image.size, (255, 255, 255))
@@ -486,7 +486,7 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                 return processed_image, None
             
             crop_button.click(
-                fn=process_crop_with_download,
+                fn=process_and_save_crop,
                 inputs=[crop_input, crop_format],
                 outputs=[crop_output, crop_download]
             )
