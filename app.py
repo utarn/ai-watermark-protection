@@ -98,7 +98,7 @@ def crop_image(image: Image.Image) -> Image.Image:
     return cropped_image
 
 
-def process_expand_single(image):
+def process_expand_single(image, output_format='WEBP'):
     """Process single image expansion"""
     if image is None:
         return None
@@ -109,18 +109,42 @@ def process_expand_single(image):
             image = Image.fromarray(image)
         
         expanded = expand_image(image)
+        
+        # Convert image to the selected format for proper download
+        output_format = output_format.upper()
+        if output_format == 'JPG':
+            # Convert to RGB for JPEG
+            if expanded.mode in ['RGBA', 'LA']:
+                # Create white background
+                background = Image.new('RGB', expanded.size, (255, 255, 255))
+                if expanded.mode == 'RGBA':
+                    background.paste(expanded, mask=expanded.split()[-1])
+                else:
+                    background.paste(expanded)
+                expanded = background
+            elif expanded.mode not in ['RGB']:
+                expanded = expanded.convert('RGB')
+        elif output_format == 'PNG':
+            # Keep original mode for PNG to preserve transparency
+            pass
+        elif output_format == 'WEBP':
+            # Keep original mode for WebP to preserve transparency
+            pass
+        
         return expanded
     except Exception as e:
         print(f"Error expanding image: {e}")
         return None
 
 
-def process_expand_batch(images):
+def process_expand_batch(images, output_format='WEBP'):
     """Process batch image expansion"""
     if images is None or len(images) == 0:
         return []
     
     results = []
+    output_format = output_format.upper()
+    
     for img in images:
         try:
             # Convert to PIL Image if needed
@@ -128,6 +152,27 @@ def process_expand_batch(images):
                 img = Image.fromarray(img)
             
             expanded = expand_image(img)
+            
+            # Convert image to the selected format for proper download
+            if output_format == 'JPG':
+                # Convert to RGB for JPEG
+                if expanded.mode in ['RGBA', 'LA']:
+                    # Create white background
+                    background = Image.new('RGB', expanded.size, (255, 255, 255))
+                    if expanded.mode == 'RGBA':
+                        background.paste(expanded, mask=expanded.split()[-1])
+                    else:
+                        background.paste(expanded)
+                    expanded = background
+                elif expanded.mode not in ['RGB']:
+                    expanded = expanded.convert('RGB')
+            elif output_format == 'PNG':
+                # Keep original mode for PNG to preserve transparency
+                pass
+            elif output_format == 'WEBP':
+                # Keep original mode for WebP to preserve transparency
+                pass
+            
             results.append(expanded)
         except Exception as e:
             print(f"Error expanding image: {e}")
@@ -136,7 +181,7 @@ def process_expand_batch(images):
     return results
 
 
-def process_crop_single(image):
+def process_crop_single(image, output_format='WEBP'):
     """Process single image cropping"""
     if image is None:
         return None
@@ -147,18 +192,42 @@ def process_crop_single(image):
             image = Image.fromarray(image)
         
         cropped = crop_image(image)
+        
+        # Convert image to the selected format for proper download
+        output_format = output_format.upper()
+        if output_format == 'JPG':
+            # Convert to RGB for JPEG
+            if cropped.mode in ['RGBA', 'LA']:
+                # Create white background
+                background = Image.new('RGB', cropped.size, (255, 255, 255))
+                if cropped.mode == 'RGBA':
+                    background.paste(cropped, mask=cropped.split()[-1])
+                else:
+                    background.paste(cropped)
+                cropped = background
+            elif cropped.mode not in ['RGB']:
+                cropped = cropped.convert('RGB')
+        elif output_format == 'PNG':
+            # Keep original mode for PNG to preserve transparency
+            pass
+        elif output_format == 'WEBP':
+            # Keep original mode for WebP to preserve transparency
+            pass
+        
         return cropped
     except Exception as e:
         print(f"Error cropping image: {e}")
         return None
 
 
-def process_crop_batch(images):
+def process_crop_batch(images, output_format='WEBP'):
     """Process batch image cropping"""
     if images is None or len(images) == 0:
         return []
     
     results = []
+    output_format = output_format.upper()
+    
     for img in images:
         try:
             # Convert to PIL Image if needed
@@ -166,6 +235,27 @@ def process_crop_batch(images):
                 img = Image.fromarray(img)
             
             cropped = crop_image(img)
+            
+            # Convert image to the selected format for proper download
+            if output_format == 'JPG':
+                # Convert to RGB for JPEG
+                if cropped.mode in ['RGBA', 'LA']:
+                    # Create white background
+                    background = Image.new('RGB', cropped.size, (255, 255, 255))
+                    if cropped.mode == 'RGBA':
+                        background.paste(cropped, mask=cropped.split()[-1])
+                    else:
+                        background.paste(cropped)
+                    cropped = background
+                elif cropped.mode not in ['RGB']:
+                    cropped = cropped.convert('RGB')
+            elif output_format == 'PNG':
+                # Keep original mode for PNG to preserve transparency
+                pass
+            elif output_format == 'WEBP':
+                # Keep original mode for WebP to preserve transparency
+                pass
+            
             results.append(cropped)
         except Exception as e:
             print(f"Error cropping image: {e}")
@@ -201,12 +291,25 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         type="pil",
                         sources=["upload"]
                     )
+                    expand_format = gr.Dropdown(
+                        choices=["WEBP", "PNG", "JPG"],
+                        value="WEBP",
+                        label="Output Format (รูปแบบไฟล์)"
+                    )
                     expand_button = gr.Button("เพิ่มพื้นที่ป้องกัน (Add Protection)", variant="primary")
                 
                 with gr.Column():
                     expand_output = gr.Image(
                         label="ผลลัพธ์ (Result)",
                         type="pil"
+                    )
+                    expand_download = gr.File(
+                        label="Download Processed Image",
+                        visible=False
+                    )
+                    expand_download = gr.File(
+                        label="Download Processed Image",
+                        visible=False
                     )
             
             gr.Markdown("---")
@@ -227,21 +330,58 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         height="auto"
                     )
             
+            def process_and_save_expand(image, output_format):
+                processed_image = process_expand_single(image, output_format)
+                if processed_image is None:
+                    return None, None
+                
+                # Save to temporary file for download
+                import tempfile
+                import os
+                
+                output_format = output_format.upper()
+                if output_format == 'JPG':
+                    ext = '.jpg'
+                    format_name = 'JPEG'
+                elif output_format == 'PNG':
+                    ext = '.png'
+                    format_name = 'PNG'
+                else:  # WEBP
+                    ext = '.webp'
+                    format_name = 'WEBP'
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
+                    if output_format == 'JPG':
+                        if processed_image.mode in ['RGBA', 'LA']:
+                            # Create white background for JPEG
+                            background = Image.new('RGB', processed_image.size, (255, 255, 255))
+                            if processed_image.mode == 'RGBA':
+                                background.paste(processed_image, mask=processed_image.split()[-1])
+                            else:
+                                background.paste(processed_image)
+                            background.save(tmp_file.name, format_name, quality=95)
+                        else:
+                            processed_image.save(tmp_file.name, format_name, quality=95)
+                    else:
+                        processed_image.save(tmp_file.name, format_name, quality=95)
+                    
+                    return processed_image, tmp_file.name
+            
             expand_button.click(
-                fn=process_expand_single,
-                inputs=expand_input,
-                outputs=expand_output
+                fn=process_and_save_expand,
+                inputs=[expand_input, expand_format],
+                outputs=[expand_output, expand_download]
             )
             
-            def process_files_expand(files):
+            def process_files_expand(files, output_format):
                 if files is None or len(files) == 0:
                     return []
                 images = [Image.open(f.name) for f in files]
-                return process_expand_batch(images)
+                return process_expand_batch(images, output_format)
             
             expand_batch_button.click(
                 fn=process_files_expand,
-                inputs=expand_batch_input,
+                inputs=[expand_batch_input, expand_format],
                 outputs=expand_batch_output
             )
         
@@ -266,12 +406,25 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         type="pil",
                         sources=["upload"]
                     )
+                    crop_format = gr.Dropdown(
+                        choices=["WEBP", "PNG", "JPG"],
+                        value="WEBP",
+                        label="Output Format (รูปแบบไฟล์)"
+                    )
                     crop_button = gr.Button("ตัดพื้นที่คืน (Restore Original)", variant="primary")
                 
                 with gr.Column():
                     crop_output = gr.Image(
                         label="ผลลัพธ์ (Result)",
                         type="pil"
+                    )
+                    crop_download = gr.File(
+                        label="Download Processed Image",
+                        visible=False
+                    )
+                    crop_download = gr.File(
+                        label="Download Processed Image",
+                        visible=False
                     )
             
             gr.Markdown("---")
@@ -291,22 +444,62 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         columns=3,
                         height="auto"
                     )
+                    crop_batch_download = gr.File(
+                        label="ดาวน์โหลดไฟล์ทั้งหมด (Download All Files)",
+                        visible=False
+                    )
+            
+            def process_and_save_crop(image, output_format):
+                processed_image = process_crop_single(image, output_format)
+                if processed_image is 'JPG':
+                    # Convert to RGB for JPEG
+                    if processed_image.mode in ['RGBA', 'LA']:
+                        background = Image.new('RGB', processed_image.size, (255, 255, 255))
+                        if processed_image.mode == 'RGBA':
+                            background.paste(processed_image, mask=processed_image.split()[-1])
+                        else:
+                            background.paste(processed_image)
+                        processed_image = background
+                    elif processed_image.mode not in ['RGB']:
+                        processed_image = processed_image.convert('RGB')
+                    
+                    # Save to bytes
+                    img_bytes = io.BytesIO()
+                    processed_image.save(img_bytes, format='JPEG', quality=95)
+                    img_bytes.seek(0)
+                    return processed_image, img_bytes
+                    
+                elif output_format == 'PNG':
+                    # Save to bytes
+                    img_bytes = io.BytesIO()
+                    processed_image.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    return processed_image, img_bytes
+                    
+                elif output_format == 'WEBP':
+                    # Save to bytes
+                    img_bytes = io.BytesIO()
+                    processed_image.save(img_bytes, format='WEBP', quality=95)
+                    img_bytes.seek(0)
+                    return processed_image, img_bytes
+                
+                return processed_image, None
             
             crop_button.click(
-                fn=process_crop_single,
-                inputs=crop_input,
-                outputs=crop_output
+                fn=process_crop_with_download,
+                inputs=[crop_input, crop_format],
+                outputs=[crop_output, crop_download]
             )
             
-            def process_files_crop(files):
+            def process_files_crop(files, output_format):
                 if files is None or len(files) == 0:
                     return []
                 images = [Image.open(f.name) for f in files]
-                return process_crop_batch(images)
+                return process_crop_batch(images, output_format)
             
             crop_batch_button.click(
                 fn=process_files_crop,
-                inputs=crop_batch_input,
+                inputs=[crop_batch_input, crop_format],
                 outputs=crop_batch_output
             )
     

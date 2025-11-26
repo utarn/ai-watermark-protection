@@ -34,15 +34,16 @@ def get_output_path(input_path: Path, suffix: str) -> Path:
     return suffix_path
 
 
-def save_image_with_suffix(image: Image.Image, input_path: Path, suffix: str, output_dir: Optional[Path] = None) -> Path:
+def save_image_with_suffix(image: Image.Image, input_path: Path, suffix: str, output_dir: Optional[Path] = None, output_format: str = None) -> Path:
     """
-    Save PIL Image with specified suffix.
+    Save PIL Image with specified suffix and format.
 
     Args:
         image: PIL Image to save
         input_path: Original input file path
         suffix: Suffix to add to filename
         output_dir: Optional output directory (defaults to same directory as input)
+        output_format: Optional output format ('PNG', 'JPG', 'WEBP')
 
     Returns:
         Path to the saved file
@@ -50,12 +51,38 @@ def save_image_with_suffix(image: Image.Image, input_path: Path, suffix: str, ou
     if output_dir is None:
         output_dir = input_path.parent
 
-    output_path = output_dir / get_output_path(input_path, suffix).name
+    # Determine output format and file extension
+    if output_format:
+        output_format = output_format.upper()
+        if output_format == 'JPG':
+            extension = '.jpg'
+        elif output_format == 'PNG':
+            extension = '.png'
+        elif output_format == 'WEBP':
+            extension = '.webp'
+        else:
+            output_format = 'PNG'
+            extension = '.png'
+    else:
+        # Use original format if no output format specified
+        if input_path.suffix.lower() in ['.png']:
+            output_format = 'PNG'
+            extension = '.png'
+        elif input_path.suffix.lower() in ['.jpg', '.jpeg']:
+            output_format = 'JPEG'
+            extension = '.jpg'
+        else:
+            output_format = 'PNG'
+            extension = '.png'
 
-    # Determine format based on file extension
-    if output_path.suffix.lower() in ['.png']:
+    # Generate output path with correct extension
+    stem = input_path.stem
+    output_path = output_dir / f"{stem}{suffix}{extension}"
+
+    # Save image in the specified format
+    if output_format == 'PNG':
         image.save(output_path, 'PNG')
-    elif output_path.suffix.lower() in ['.jpg', '.jpeg']:
+    elif output_format in ['JPEG', 'JPG']:
         # Convert to RGB for JPEG
         if image.mode in ['RGBA', 'LA']:
             # Create white background
@@ -67,6 +94,12 @@ def save_image_with_suffix(image: Image.Image, input_path: Path, suffix: str, ou
             background.save(output_path, 'JPEG', quality=95)
         else:
             image.save(output_path, 'JPEG', quality=95)
+    elif output_format == 'WEBP':
+        # Handle transparency for WebP
+        if image.mode in ['RGBA', 'LA']:
+            image.save(output_path, 'WEBP', quality=95, lossless=False)
+        else:
+            image.save(output_path, 'WEBP', quality=95, lossless=False)
     else:
         # Default to PNG for unsupported formats
         png_path = output_path.with_suffix('.png')
@@ -76,13 +109,14 @@ def save_image_with_suffix(image: Image.Image, input_path: Path, suffix: str, ou
     return output_path
 
 
-def process_enlarge_images(input_paths: List[Path], output_dir: Optional[Path] = None) -> List[Path]:
+def process_enlarge_images(input_paths: List[Path], output_dir: Optional[Path] = None, output_format: str = None) -> List[Path]:
     """
     Process multiple images with enlarge operation.
 
     Args:
         input_paths: List of input image paths
         output_dir: Optional output directory
+        output_format: Optional output format ('PNG', 'JPG', 'WEBP')
 
     Returns:
         List of successful output paths
@@ -96,8 +130,8 @@ def process_enlarge_images(input_paths: List[Path], output_dir: Optional[Path] =
                 # Process image
                 enlarged_img = expand_image(img)
 
-                # Save with suffix
-                output_path = save_image_with_suffix(enlarged_img, input_path, '-enlarge', output_dir)
+                # Save with suffix and format
+                output_path = save_image_with_suffix(enlarged_img, input_path, '-enlarge', output_dir, output_format)
                 successful_outputs.append(output_path)
                 print(f"✓ Processed: {input_path} -> {output_path}")
 
@@ -108,13 +142,14 @@ def process_enlarge_images(input_paths: List[Path], output_dir: Optional[Path] =
     return successful_outputs
 
 
-def process_restore_images(input_paths: List[Path], output_dir: Optional[Path] = None) -> List[Path]:
+def process_restore_images(input_paths: List[Path], output_dir: Optional[Path] = None, output_format: str = None) -> List[Path]:
     """
     Process multiple images with restore operation.
 
     Args:
         input_paths: List of input image paths
         output_dir: Optional output directory
+        output_format: Optional output format ('PNG', 'JPG', 'WEBP')
 
     Returns:
         List of successful output paths
@@ -128,8 +163,8 @@ def process_restore_images(input_paths: List[Path], output_dir: Optional[Path] =
                 # Process image
                 restored_img = crop_image(img)
 
-                # Save with suffix
-                output_path = save_image_with_suffix(restored_img, input_path, '-restore', output_dir)
+                # Save with suffix and format
+                output_path = save_image_with_suffix(restored_img, input_path, '-restore', output_dir, output_format)
                 successful_outputs.append(output_path)
                 print(f"✓ Processed: {input_path} -> {output_path}")
 
@@ -215,6 +250,12 @@ Examples:
         help='Verbose output'
     )
 
+    parser.add_argument(
+        '--format', '-f',
+        choices=['PNG', 'JPG', 'WEBP'],
+        help='Output format for processed images (default: original format)'
+    )
+
     args = parser.parse_args()
 
     # Validate output directory
@@ -241,9 +282,9 @@ Examples:
 
     # Process based on operation
     if args.operation == 'enlarge':
-        successful_outputs = process_enlarge_images(all_input_paths, args.output_dir)
+        successful_outputs = process_enlarge_images(all_input_paths, args.output_dir, args.format)
     else:  # restore
-        successful_outputs = process_restore_images(all_input_paths, args.output_dir)
+        successful_outputs = process_restore_images(all_input_paths, args.output_dir, args.format)
 
     # Summary
     print(f"\nProcessing complete!")
