@@ -3,6 +3,10 @@ from PIL import Image
 import numpy as np
 from typing import List, Union
 import io
+import zipfile
+import tempfile
+import os
+from datetime import datetime
 
 
 def expand_image(image: Image.Image) -> Image.Image:
@@ -264,13 +268,160 @@ def process_crop_batch(images, output_format='WEBP'):
     return results
 
 
+def create_zip_from_images(images, output_format='WEBP', prefix='image'):
+    """
+    Create a zip file containing all processed images.
+    
+    Args:
+        images: List of PIL Image objects
+        output_format: Format to save images (PNG, JPG, WEBP)
+        prefix: Prefix for image filenames
+        
+    Returns:
+        Path to the created zip file
+    """
+    if not images or len(images) == 0:
+        return None
+    
+    output_format = output_format.upper()
+    
+    # Determine file extension
+    if output_format == 'JPG':
+        ext = '.jpg'
+        format_name = 'JPEG'
+    elif output_format == 'PNG':
+        ext = '.png'
+        format_name = 'PNG'
+    else:  # WEBP
+        ext = '.webp'
+        format_name = 'WEBP'
+    
+    # Create temporary zip file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    zip_filename = f"{prefix}_batch_{timestamp}.zip"
+    zip_path = os.path.join(tempfile.gettempdir(), zip_filename)
+    
+    try:
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for idx, img in enumerate(images, 1):
+                # Create temporary file for each image
+                img_filename = f"{prefix}_{idx:03d}{ext}"
+                
+                # Save image to bytes
+                img_bytes = io.BytesIO()
+                
+                if output_format == 'JPG':
+                    # Convert to RGB for JPEG if needed
+                    if img.mode in ['RGBA', 'LA']:
+                        background = Image.new('RGB', img.size, (255, 255, 255))
+                        if img.mode == 'RGBA':
+                            background.paste(img, mask=img.split()[-1])
+                        else:
+                            background.paste(img)
+                        background.save(img_bytes, format_name, quality=95)
+                    else:
+                        img.save(img_bytes, format_name, quality=95)
+                else:
+                    img.save(img_bytes, format_name, quality=95)
+                
+                # Add to zip
+                zipf.writestr(img_filename, img_bytes.getvalue())
+        
+        return zip_path
+    except Exception as e:
+        print(f"Error creating zip file: {e}")
+        return None
+
+
 # Create Gradio interface
 with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pro") as app:
     gr.Markdown("# ป้องกันลายน้ำจาก Gemini Pro")
     gr.Markdown("แอปพลิเคชันสำหรับป้องกันและลบลายน้ำจากรูปภาพ")
     
     with gr.Tabs():
-        # Tab 1: Expand (Add Protection)
+        # Tab 1: Instructions (New)
+        with gr.Tab("วิธีใช้งาน (How to Use)"):
+            gr.Markdown("""
+            # คู่มือการใช้งานแอปพลิเคชัน
+            
+            ## 📱 แอปนี้ทำอะไร?
+            
+            แอปพลิเคชันนี้ช่วยให้คุณสามารถ**ขยายรูปภาพไปทางขวาและด้านล่าง**เพื่อป้องกันลายน้ำจาก Google Gemini Pro Image Generation
+            โดยเฉพาะอย่างยิ่งเหมาะสำหรับการใช้งานบนมือถือ เพราะมีอินเทอร์เฟซที่ใช้งานง่าย
+            
+            ---
+            
+            ## ⚡ วิธีการใช้งาน (แนะนำ)
+            
+            ### ขั้นตอนที่ 1: ใช้ Gemini สร้างหรือแก้ไขรูปภาพ
+            - ใช้ Google Gemini Pro สร้างรูปภาพหรือแก้ไขรูปภาพของคุณ
+            - Gemini จะใส่ลายน้ำ (ดาวสีขาว) ที่มุมล่างขวาของรูปภาพ
+            
+            ### ขั้นตอนที่ 2: ขยายรูปภาพเพื่อป้องกันลายน้ำ
+            1. นำรูปภาพที่ได้จาก Gemini มาอัปโหลดในแท็บ **"เพิ่มพื้นที่ป้องกัน"**
+            2. กดปุ่ม "เพิ่มพื้นที่ป้องกัน"
+            3. รูปภาพจะถูกขยายออกไป 10% ทางขวาและด้านล่าง (เพิ่มพื้นที่สีขาว)
+            4. ดาวน์โหลดรูปที่ขยายแล้ว
+            
+            ### ขั้นตอนที่ 3: ใช้ Gemini ลบลายน้ำ
+            1. นำรูปที่ขยายแล้วไปให้ Gemini แก้ไข
+            2. สั่งให้ Gemini **"ลบดาวสีขาวที่อยู่รอบๆ มุมล่างขวาก่อนพื้นที่สีขาว"**
+            3. Gemini จะลบดาวเดิมออก และสร้างลายน้ำใหม่ที่พื้นที่สีขาวที่เราเพิ่มเข้าไป
+            
+            ### ขั้นตอนที่ 4: ตัดพื้นที่สีขาวออก
+            1. นำรูปที่ Gemini แก้ไขแล้วมาอัปโหลดในแท็บ **"ตัดพื้นที่คืน"**
+            2. กดปุ่ม "ตัดพื้นที่คืน"
+            3. แอปจะตัดพื้นที่สีขาวที่มีลายน้ำออก
+            4. ได้รูปภาพสะอาดไม่มีลายน้ำ! ✨
+            
+            ---
+            
+            ## 🎯 ตัวอย่างการทำงาน
+            
+            ```
+            รูปต้นฉบับจาก Gemini (มีลายน้ำที่มุมล่างขวา)
+                    ↓
+            [ขั้นตอนที่ 2] ขยายรูป → เพิ่มพื้นที่สีขาว 10% ขวาและล่าง
+                    ↓
+            [ขั้นตอนที่ 3] ให้ Gemini ลบดาวเดิม → ลายน้ำใหม่ไปอยู่บนพื้นที่สีขาว
+                    ↓
+            [ขั้นตอนที่ 4] ตัดพื้นที่สีขาว → ได้รูปสะอาดไม่มีลายน้ำ
+            ```
+            
+            ---
+            
+            ## 💡 เคล็ดลับ
+            
+            - **ใช้บนมือถือได้สะดวก**: UI ออกแบบมาให้ใช้งานง่ายบนหน้าจอมือถือ
+            - **รองรับหลายรูป**: สามารถประมวลผลหลายรูปพร้อมกันได้ในโหมด Batch
+            - **เลือกรูปแบบไฟล์ได้**: รองรับ PNG, JPG, และ WEBP
+            - **ความแม่นยำสูง**: การตัดคืนใช้สูตรคำนวณแบบย้อนกลับเพื่อความแม่นยำ
+            
+            ---
+            
+            ## 📐 สูตรคำนวณ
+            
+            **การขยาย (Expand):**
+            - ความกว้างใหม่ = ความกว้างเดิม × 1.1 (เพิ่ม 10%)
+            - ความสูงใหม่ = ความสูงเดิม × 1.1 (เพิ่ม 10%)
+            
+            **การตัดคืน (Restore):**
+            - ความกว้างเดิม = ความกว้างปัจจุบัน ÷ 1.1
+            - ความสูงเดิม = ความสูงปัจจุบัน ÷ 1.1
+            
+            ตัวอย่าง: 1000×800px → ขยาย → 1100×880px → ตัดคืน → 1000×800px ✓
+            
+            ---
+            
+            ## ⚠️ หมายเหตุสำคัญ
+            
+            - แอปนี้**ไม่ได้ลบลายน้ำโดยตรง** แต่ช่วยให้ Gemini ลบลายน้ำได้ง่ายขึ้น
+            - ต้องใช้ร่วมกับ Google Gemini Pro Image Generation
+            - รูปภาพจะถูกแปลงเป็น PNG/JPG/WEBP ตามที่เลือก
+            - รองรับความโปร่งใส (transparency) สำหรับไฟล์ PNG
+            """)
+        
+        # Tab 2: Expand (Add Protection) - moved from Tab 1
         with gr.Tab("เพิ่มพื้นที่ป้องกัน (Add Protection Area)"):
             gr.Markdown("""
             ### คำอธิบาย:
@@ -321,6 +472,11 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         label="อัปโหลดหลายรูปภาพ (Upload Multiple Images)",
                         file_types=["image"]
                     )
+                    expand_batch_format = gr.Dropdown(
+                        choices=["WEBP", "PNG", "JPG"],
+                        value="WEBP",
+                        label="Output Format (รูปแบบไฟล์)"
+                    )
                     expand_batch_button = gr.Button("ประมวลผลทั้งหมด (Process All)", variant="primary")
                 
                 with gr.Column():
@@ -328,6 +484,10 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         label="ผลลัพธ์ทั้งหมด (All Results)",
                         columns=3,
                         height="auto"
+                    )
+                    expand_batch_download_zip = gr.File(
+                        label="📦 ดาวน์โหลดไฟล์ ZIP ทั้งหมด (Download All as ZIP)",
+                        visible=True
                     )
             
             def process_and_save_expand(image, output_format):
@@ -375,17 +535,22 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
             
             def process_files_expand(files, output_format):
                 if files is None or len(files) == 0:
-                    return []
+                    return [], None
                 images = [Image.open(f.name) for f in files]
-                return process_expand_batch(images, output_format)
+                processed_images = process_expand_batch(images, output_format)
+                
+                # Create zip file
+                zip_path = create_zip_from_images(processed_images, output_format, prefix='expanded')
+                
+                return processed_images, zip_path
             
             expand_batch_button.click(
                 fn=process_files_expand,
-                inputs=[expand_batch_input, expand_format],
-                outputs=expand_batch_output
+                inputs=[expand_batch_input, expand_batch_format],
+                outputs=[expand_batch_output, expand_batch_download_zip]
             )
         
-        # Tab 2: Crop (Remove Protection)
+        # Tab 3: Crop (Remove Protection) - moved from Tab 2
         with gr.Tab("ตัดพื้นที่คืน (Restore Original)"):
             gr.Markdown("""
             ### คำอธิบาย:
@@ -436,6 +601,11 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         label="อัปโหลดหลายรูปภาพ (Upload Multiple Images)",
                         file_types=["image"]
                     )
+                    crop_batch_format = gr.Dropdown(
+                        choices=["WEBP", "PNG", "JPG"],
+                        value="WEBP",
+                        label="Output Format (รูปแบบไฟล์)"
+                    )
                     crop_batch_button = gr.Button("ประมวลผลทั้งหมด (Process All)", variant="primary")
                 
                 with gr.Column():
@@ -444,9 +614,9 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         columns=3,
                         height="auto"
                     )
-                    crop_batch_download = gr.File(
-                        label="ดาวน์โหลดไฟล์ทั้งหมด (Download All Files)",
-                        visible=False
+                    crop_batch_download_zip = gr.File(
+                        label="📦 ดาวน์โหลดไฟล์ ZIP ทั้งหมด (Download All as ZIP)",
+                        visible=True
                     )
             
             def process_and_save_crop(image, output_format):
@@ -493,14 +663,19 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
             
             def process_files_crop(files, output_format):
                 if files is None or len(files) == 0:
-                    return []
+                    return [], None
                 images = [Image.open(f.name) for f in files]
-                return process_crop_batch(images, output_format)
+                processed_images = process_crop_batch(images, output_format)
+                
+                # Create zip file
+                zip_path = create_zip_from_images(processed_images, output_format, prefix='restored')
+                
+                return processed_images, zip_path
             
             crop_batch_button.click(
                 fn=process_files_crop,
-                inputs=[crop_batch_input, crop_format],
-                outputs=crop_batch_output
+                inputs=[crop_batch_input, crop_batch_format],
+                outputs=[crop_batch_output, crop_batch_download_zip]
             )
     
     gr.Markdown("""
