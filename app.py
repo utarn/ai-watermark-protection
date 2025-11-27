@@ -6,6 +6,7 @@ import io
 import zipfile
 import tempfile
 import os
+from pathlib import Path
 from datetime import datetime
 
 
@@ -283,16 +284,17 @@ def create_zip_from_images(images, output_format='WEBP', prefix='image'):
     if not images or len(images) == 0:
         return None
     
-    output_format = output_format.upper()
+    # Ensure output_format is uppercase for consistency
+    output_format = output_format.upper() if output_format else 'WEBP'
     
-    # Determine file extension
-    if output_format == 'JPG':
+    # Determine file extension and format name based on output_format
+    if output_format == 'JPG' or output_format == 'JPEG':
         ext = '.jpg'
         format_name = 'JPEG'
     elif output_format == 'PNG':
         ext = '.png'
         format_name = 'PNG'
-    else:  # WEBP
+    else:  # Default to WEBP
         ext = '.webp'
         format_name = 'WEBP'
     
@@ -455,12 +457,8 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         type="pil"
                     )
                     expand_download = gr.File(
-                        label="Download Processed Image",
-                        visible=False
-                    )
-                    expand_download = gr.File(
-                        label="Download Processed Image",
-                        visible=False
+                        label="📥 Download Processed Image",
+                        visible=True
                     )
             
             gr.Markdown("---")
@@ -491,41 +489,50 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                     )
             
             def process_and_save_expand(image, output_format):
+                if image is None:
+                    return None, None
+                    
                 processed_image = process_expand_single(image, output_format)
                 if processed_image is None:
                     return None, None
                 
-                # Save to temporary file for download
-                import tempfile
-                import os
+                # Save to temporary file for download with correct format
+                output_format = output_format.upper() if output_format else 'WEBP'
                 
-                output_format = output_format.upper()
-                if output_format == 'JPG':
+                if output_format == 'JPG' or output_format == 'JPEG':
                     ext = '.jpg'
                     format_name = 'JPEG'
                 elif output_format == 'PNG':
                     ext = '.png'
                     format_name = 'PNG'
-                else:  # WEBP
+                else:
                     ext = '.webp'
                     format_name = 'WEBP'
                 
-                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
-                    if output_format == 'JPG':
-                        if processed_image.mode in ['RGBA', 'LA']:
-                            # Create white background for JPEG
-                            background = Image.new('RGB', processed_image.size, (255, 255, 255))
-                            if processed_image.mode == 'RGBA':
-                                background.paste(processed_image, mask=processed_image.split()[-1])
-                            else:
-                                background.paste(processed_image)
-                            background.save(tmp_file.name, format_name, quality=95)
+                # Create temp file with proper naming: image-enlarge.ext
+                tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext, prefix='image-enlarge_', dir=tempfile.gettempdir())
+                
+                # Rename to have clean filename
+                final_name = os.path.join(tempfile.gettempdir(), f'image-enlarge{ext}')
+                
+                # Save with format conversion if needed
+                if output_format == 'JPG' or output_format == 'JPEG':
+                    if processed_image.mode in ['RGBA', 'LA']:
+                        # Create white background for JPEG
+                        background = Image.new('RGB', processed_image.size, (255, 255, 255))
+                        if processed_image.mode == 'RGBA':
+                            background.paste(processed_image, mask=processed_image.split()[-1])
                         else:
-                            processed_image.save(tmp_file.name, format_name, quality=95)
+                            background.paste(processed_image)
+                        background.save(final_name, format_name, quality=95)
                     else:
-                        processed_image.save(tmp_file.name, format_name, quality=95)
-                    
-                    return processed_image, tmp_file.name
+                        processed_image.save(final_name, format_name, quality=95)
+                else:
+                    processed_image.save(final_name, format_name, quality=95)
+                
+                tmp_file.close()
+                os.unlink(tmp_file.name)  # Remove the temp file
+                return processed_image, final_name
             
             expand_button.click(
                 fn=process_and_save_expand,
@@ -536,13 +543,49 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
             def process_files_expand(files, output_format):
                 if files is None or len(files) == 0:
                     return [], None
+                
+                # Store original filenames
+                original_filenames = [Path(f.name).stem for f in files]
                 images = [Image.open(f.name) for f in files]
                 processed_images = process_expand_batch(images, output_format)
                 
                 # Create zip file
                 zip_path = create_zip_from_images(processed_images, output_format, prefix='expanded')
                 
-                return processed_images, zip_path
+                # Save processed images to temporary files with correct extensions for gallery display
+                output_format = output_format.upper() if output_format else 'WEBP'
+                if output_format == 'JPG' or output_format == 'JPEG':
+                    ext = '.jpg'
+                    format_name = 'JPEG'
+                elif output_format == 'PNG':
+                    ext = '.png'
+                    format_name = 'PNG'
+                else:
+                    ext = '.webp'
+                    format_name = 'WEBP'
+                
+                gallery_files = []
+                for idx, (img, orig_name) in enumerate(zip(processed_images, original_filenames)):
+                    # Use original filename with -enlarge suffix
+                    filename = f'{orig_name}-enlarge{ext}'
+                    temp_path = os.path.join(tempfile.gettempdir(), filename)
+                    
+                    if output_format == 'JPG' or output_format == 'JPEG':
+                        if img.mode in ['RGBA', 'LA']:
+                            background = Image.new('RGB', img.size, (255, 255, 255))
+                            if img.mode == 'RGBA':
+                                background.paste(img, mask=img.split()[-1])
+                            else:
+                                background.paste(img)
+                            background.save(temp_path, format_name, quality=95)
+                        else:
+                            img.save(temp_path, format_name, quality=95)
+                    else:
+                        img.save(temp_path, format_name, quality=95)
+                    
+                    gallery_files.append(temp_path)
+                
+                return gallery_files, zip_path
             
             expand_batch_button.click(
                 fn=process_files_expand,
@@ -584,12 +627,8 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                         type="pil"
                     )
                     crop_download = gr.File(
-                        label="Download Processed Image",
-                        visible=False
-                    )
-                    crop_download = gr.File(
-                        label="Download Processed Image",
-                        visible=False
+                        label="📥 Download Processed Image",
+                        visible=True
                     )
             
             gr.Markdown("---")
@@ -620,40 +659,50 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
                     )
             
             def process_and_save_crop(image, output_format):
+                if image is None:
+                    return None, None
+                    
                 processed_image = process_crop_single(image, output_format)
-                if output_format == 'JPG':
-                    # Convert to RGB for JPEG
+                if processed_image is None:
+                    return None, None
+                
+                # Save to temporary file for download with correct format
+                output_format = output_format.upper() if output_format else 'WEBP'
+                
+                if output_format == 'JPG' or output_format == 'JPEG':
+                    ext = '.jpg'
+                    format_name = 'JPEG'
+                elif output_format == 'PNG':
+                    ext = '.png'
+                    format_name = 'PNG'
+                else:
+                    ext = '.webp'
+                    format_name = 'WEBP'
+                
+                # Create temp file with proper naming: image-restore.ext
+                tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext, prefix='image-restore_', dir=tempfile.gettempdir())
+                
+                # Rename to have clean filename
+                final_name = os.path.join(tempfile.gettempdir(), f'image-restore{ext}')
+                
+                # Save with format conversion if needed
+                if output_format == 'JPG' or output_format == 'JPEG':
                     if processed_image.mode in ['RGBA', 'LA']:
+                        # Create white background for JPEG
                         background = Image.new('RGB', processed_image.size, (255, 255, 255))
                         if processed_image.mode == 'RGBA':
                             background.paste(processed_image, mask=processed_image.split()[-1])
                         else:
                             background.paste(processed_image)
-                        processed_image = background
-                    elif processed_image.mode not in ['RGB']:
-                        processed_image = processed_image.convert('RGB')
-                    
-                    # Save to bytes
-                    img_bytes = io.BytesIO()
-                    processed_image.save(img_bytes, format='JPEG', quality=95)
-                    img_bytes.seek(0)
-                    return processed_image, img_bytes
-                    
-                elif output_format == 'PNG':
-                    # Save to bytes
-                    img_bytes = io.BytesIO()
-                    processed_image.save(img_bytes, format='PNG')
-                    img_bytes.seek(0)
-                    return processed_image, img_bytes
-                    
-                elif output_format == 'WEBP':
-                    # Save to bytes
-                    img_bytes = io.BytesIO()
-                    processed_image.save(img_bytes, format='WEBP', quality=95)
-                    img_bytes.seek(0)
-                    return processed_image, img_bytes
+                        background.save(final_name, format_name, quality=95)
+                    else:
+                        processed_image.save(final_name, format_name, quality=95)
+                else:
+                    processed_image.save(final_name, format_name, quality=95)
                 
-                return processed_image, None
+                tmp_file.close()
+                os.unlink(tmp_file.name)  # Remove the temp file
+                return processed_image, final_name
             
             crop_button.click(
                 fn=process_and_save_crop,
@@ -664,13 +713,49 @@ with gr.Blocks(title="ป้องกันลายน้ำจาก Gemini Pr
             def process_files_crop(files, output_format):
                 if files is None or len(files) == 0:
                     return [], None
+                
+                # Store original filenames
+                original_filenames = [Path(f.name).stem for f in files]
                 images = [Image.open(f.name) for f in files]
                 processed_images = process_crop_batch(images, output_format)
                 
                 # Create zip file
                 zip_path = create_zip_from_images(processed_images, output_format, prefix='restored')
                 
-                return processed_images, zip_path
+                # Save processed images to temporary files with correct extensions for gallery display
+                output_format = output_format.upper() if output_format else 'WEBP'
+                if output_format == 'JPG' or output_format == 'JPEG':
+                    ext = '.jpg'
+                    format_name = 'JPEG'
+                elif output_format == 'PNG':
+                    ext = '.png'
+                    format_name = 'PNG'
+                else:
+                    ext = '.webp'
+                    format_name = 'WEBP'
+                
+                gallery_files = []
+                for idx, (img, orig_name) in enumerate(zip(processed_images, original_filenames)):
+                    # Use original filename with -restore suffix
+                    filename = f'{orig_name}-restore{ext}'
+                    temp_path = os.path.join(tempfile.gettempdir(), filename)
+                    
+                    if output_format == 'JPG' or output_format == 'JPEG':
+                        if img.mode in ['RGBA', 'LA']:
+                            background = Image.new('RGB', img.size, (255, 255, 255))
+                            if img.mode == 'RGBA':
+                                background.paste(img, mask=img.split()[-1])
+                            else:
+                                background.paste(img)
+                            background.save(temp_path, format_name, quality=95)
+                        else:
+                            img.save(temp_path, format_name, quality=95)
+                    else:
+                        img.save(temp_path, format_name, quality=95)
+                    
+                    gallery_files.append(temp_path)
+                
+                return gallery_files, zip_path
             
             crop_batch_button.click(
                 fn=process_files_crop,
